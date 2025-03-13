@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8">
+    <title>多设备管理页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: #0D47A1;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-size: 24px;
+        }
+        .container {
+            padding: 20px;
+        }
+        .device-card {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            position: relative;
+        }
+        .device-card:hover {
+            background-color: #f0f0f0;
+        }
+        .device-id {
+            font-weight: bold;
+            font-size: 18px;
+        }
+        .record-count {
+            margin-top: 5px;
+        }
+        .delete-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: red;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .back-button, .add-button {
+            position: fixed;
+            right: 20px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .back-button {
+            bottom: 20px;
+        }
+        .add-button {
+            bottom: 80px; /* 位于返回按钮上方 */
+        }
+    </style>
+</head>
+<body>
+<header>
+    多设备管理页面
+</header>
+<div class="container" id="deviceContainer">
+    <!-- 服务器加载的设备块，标记 data-source="server" -->
+    <div th:if="${#lists.isEmpty(deviceRecords)}">
+        <p>暂无设备数据。</p>
+    </div>
+    <div th:each="record : ${deviceRecords}"
+         class="device-card"
+         data-device-id="[[${record.deviceId}]]"
+         data-source="server"
+         th:onclick="'window.location.href=\'/device-data?deviceId=' + ${record.deviceId} + '\''">
+        <!-- 删除按钮：先阻止冒泡 -->
+        <button class="delete-btn" onclick="event.stopPropagation(); deleteDevice(event, '[[${record.deviceId}]]')">删除</button>
+        <div class="device-id">
+            设备ID: <span th:text="${record.deviceId}"></span>
+        </div>
+        <div class="record-count">
+            记录数: <span th:text="${record.recordCount}"></span>
+        </div>
+    </div>
+</div>
+<!-- 添加设备按钮 -->
+<button class="add-button" onclick="showAddDevicePrompt()">添加设备</button>
+<!-- 返回地图页按钮 -->
+<button class="back-button" onclick="window.location.href='/map'">返回地图页</button>
+
+<script>
+    // 获取 localStorage 中指定 key 的数组（JSON格式存储）
+    function getLocalStorageArray(key) {
+        var arr = localStorage.getItem(key);
+        if (arr) {
+            try {
+                return JSON.parse(arr);
+            } catch (e) {
+                return [];
+            }
+        }
+        return [];
+    }
+    // 保存数组到 localStorage
+    function setLocalStorageArray(key, arr) {
+        localStorage.setItem(key, JSON.stringify(arr));
+    }
+    // 动态添加设备块（source 区分“server”或“added”）
+    function addDeviceBlock(deviceId, recordCount, source) {
+        var container = document.getElementById('deviceContainer');
+        var card = document.createElement('div');
+        card.className = 'device-card';
+        // 统一保存为字符串
+        deviceId = deviceId.toString();
+        card.setAttribute('data-device-id', deviceId);
+        card.setAttribute('data-source', source);
+        card.onclick = function() {
+            window.location.href = '/device-data?deviceId=' + deviceId;
+        };
+        card.innerHTML = `
+            <button class="delete-btn" onclick="event.stopPropagation(); deleteDevice(event, '${deviceId}')">删除</button>
+            <div class="device-id">
+                设备ID: <span>${deviceId}</span>
+            </div>
+        `;
+        container.appendChild(card);
+    }
+    // 页面加载时：
+    // 1. 移除服务器加载数据中，被 localStorage【deletedDeviceIds】中记录的设备块
+    // 2. 补充显示 localStorage【addedDeviceIds】中保存的前端新增设备块
+    document.addEventListener('DOMContentLoaded', function() {
+        var deletedDeviceIds = getLocalStorageArray('deletedDeviceIds');
+        var serverCards = document.querySelectorAll('.device-card[data-source="server"]');
+        serverCards.forEach(function(card) {
+            var deviceId = card.getAttribute('data-device-id');
+            if (deletedDeviceIds.includes(deviceId)) {
+                card.remove();
+            }
+        });
+        var addedDeviceIds = getLocalStorageArray('addedDeviceIds');
+        addedDeviceIds.forEach(function(deviceId) {
+            if (!document.querySelector('.device-card[data-device-id="' + deviceId + '"]')) {
+                addDeviceBlock(deviceId, 0, 'added');
+            }
+        });
+    });
+    // 删除设备函数：只在前端删除，更新 localStorage
+    function deleteDevice(event, deviceId) {
+        event.stopPropagation();
+        event.preventDefault();
+        // 统一转换为字符串
+        deviceId = deviceId.toString();
+        if (confirm("确认移除设备 " + deviceId + " ?")) {
+            var card = event.target.closest('.device-card');
+            if (card) {
+                var source = card.getAttribute('data-source');
+                if (source === 'server') {
+                    var deletedDeviceIds = getLocalStorageArray('deletedDeviceIds');
+                    if (!deletedDeviceIds.includes(deviceId)) {
+                        deletedDeviceIds.push(deviceId);
+                        setLocalStorageArray('deletedDeviceIds', deletedDeviceIds);
+                    }
+                } else if (source === 'added') {
+                    var addedDeviceIds = getLocalStorageArray('addedDeviceIds');
+                    var index = addedDeviceIds.indexOf(deviceId);
+                    if (index !== -1) {
+                        addedDeviceIds.splice(index, 1);
+                        setLocalStorageArray('addedDeviceIds', addedDeviceIds);
+                    }
+                }
+                card.remove();
+            }
+        }
+        return false;
+    }
+    // 添加设备函数：仅在前端添加，不修改数据库，新增的设备块记录数默认显示 0
+    function showAddDevicePrompt() {
+        var deviceIdInput = prompt("请输入要添加的设备ID：");
+        if (deviceIdInput) {
+            var deviceId = deviceIdInput.trim();
+            if (deviceId === '') {
+                alert("请输入有效的设备ID！");
+                return;
+            }
+            // 统一转换为字符串
+            deviceId = deviceId.toString();
+            // 检查页面中是否已存在该设备块
+            if (document.querySelector('.device-card[data-device-id="' + deviceId + '"]')) {
+                alert("设备已存在！");
+                return;
+            }
+            // 将设备ID保存到 localStorage【addedDeviceIds】中
+            var addedDeviceIds = getLocalStorageArray('addedDeviceIds');
+            addedDeviceIds.push(deviceId);
+            setLocalStorageArray('addedDeviceIds', addedDeviceIds);
+            // 动态添加设备块，记录数默认 0
+            addDeviceBlock(deviceId, 0, 'added');
+        }
+    }
+</script>
+</body>
+</html>

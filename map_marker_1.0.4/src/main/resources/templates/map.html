@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>百度地图经纬度搜索</title>
+    <script type="text/javascript" src="http://api.map.baidu.com/api?v=3.0&ak=nSxiPohfziUaCuONe4ViUP2N"></script>
+    <style>
+        body, html {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            position: relative; /* 使用相对定位 */
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        #controls {
+            position: absolute;
+            top: 20px; /* 距离顶部 */
+            left: 50%; /* 距离左侧50% */
+            transform: translateX(-50%); /* 左移50%以实现居中 */
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            z-index: 10;
+        }
+
+        #sidebar {
+            position: absolute;
+            top: 20px; /* 距离顶部 */
+            bottom: 60px; /* 距离底部 */
+            left: 20px; /* 距离左侧 */
+            width: 300px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 5px;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.5);
+            overflow-y: auto;
+            z-index: 10; /* 确保在地图之上 */
+            padding: 10px; /* 添加内边距 */
+        }
+
+        #sidebar h3 {
+            margin-top: 0; /* 消除默认上边距 */
+            margin-bottom: 10px; /* 设置下边距 */
+        }
+
+        #recordList {
+            padding-left: 10px; /* 添加左侧内边距 */
+        }
+
+
+        .search-input {
+            width: 150px;
+            height: 30px;
+            margin: 0 5px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .record-item {
+            background-color: #f8f8f8;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            padding-left: 15px; /* 添加左侧内边距 */
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .record-item.selected {
+            background-color: #d0e0f0; /* 高亮颜色 */
+            border-color: #007bff; /* 高亮边框颜色 */
+        }
+
+        .record-time {
+            color: gray;
+            font-size: 0.9em; /* 小一号的字体 */
+        }
+
+        .delete-button {
+            background-color: red;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            float: right; /* 仍然使用浮动 */
+            margin-left: 10px; /* 添加一些左边距 */
+            font-weight: bold; /* 字体加粗 */
+            line-height: 20px; /* 设置行高，确保按钮垂直居中 */
+            height: 30px; /* 设定按钮高度，使其和输入框高度一致 */
+        }
+
+         #iotSidebar {
+            position: absolute;
+            top: 20px; /* 距离顶部 */
+            right: 20px; /* 距离右侧 */
+            bottom: 60px; /* 距离底部 */
+            width: 300px; /* 栏的宽度 */
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 5px;
+            box-shadow: -2px 0 5px rgba(0, 0, 0, 0.5);
+            overflow-y: auto;
+            z-index: 10; /* 确保在地图之上 */
+            padding: 10px; /* 添加内边距 */
+            height: 50%; /* 设置高度为50% */
+        }
+
+        .iot-item {
+            background-color: #f8f8f8;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .fetch-button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            margin-bottom: 10px;
+            font-weight: bold; /* 字体加粗 */
+        }
+        .manage-button {
+            background-color: #28a745; /* 绿色背景 */
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="controls">
+    经度：<input type="text" id="longitude" class="search-input" value="116.404">
+    纬度：<input type="text" id="latitude" class="search-input" value="39.915">
+    <button onclick="searchLocation()">搜索位置</button>
+    <button onclick="clearMarkers()">清空标点</button>
+    <br><br>
+    <label for="zoomLevel">缩放级别：</label>
+    <input type="range" id="zoomLevel" min="3" max="18" value="10" oninput="changeZoom(this.value)">
+</div>
+<div id="sidebar">
+    <h3>搜索记录</h3>
+    <ul id="recordList"></ul>
+</div>
+
+<div id="iotSidebar">
+    <h3>最新设备数据</h3>
+    <button class="fetch-button" onclick="fetchIotData()">刷新数据</button>
+    <div id="iotDataList"></div>
+    <br><br>
+    <!-- 新增的数量输入框和按钮 -->
+    <label for="deviceCount">显示记录数量：</label>
+    <input type="number" id="deviceCount" value="5" min="1">
+    <button onclick="searchAndMark()">标记记录</button>
+    <br><br>
+    <!-- 添加跳转按钮 -->
+    <button class="manage-button" onclick="window.location.href='/multi-device-management'">多设备管理</button>
+</div>
+
+<script type="text/javascript">
+    var map;
+    var markers = [];
+    var records = [];
+    var iotRecords = []; // 用于存储 IoT 数据
+    var selectedMarkers = new Set(); // 存储被选中的标记
+
+    // 初始化地图
+    function initMap() {
+        map = new BMap.Map("map");
+        map.centerAndZoom(new BMap.Point(116.404, 39.915), 10);
+        fetchSearchRecords(); // 初始化时获取搜索记录
+    }
+
+    function autoZoom() {
+        // 判断是否有标记
+        if (markers.length === 0) {
+            return;  // 如果没有标记，则不做处理
+        }
+
+        // 创建一个空的 BMap.Bounds 对象
+        var bounds = new BMap.Bounds();
+
+        // 遍历所有标记，计算经纬度的最小值和最大值
+        markers.forEach(marker => {
+            var point = marker.getPosition();
+            bounds.extend(point);  // 扩展边界
+        });
+
+        // 设置地图视野，自动缩放
+        map.setViewport(bounds);  // 自动缩放和定位地图
+
+        // 获取当前的缩放级别
+        var zoomLevel = map.getZoom();
+
+        // 更新缩放滑块的值
+        var zoomSlider = document.getElementById("zoomSlider");
+        zoomSlider.value = zoomLevel;
+    }
+
+    function addMarkerWithLabel(longitude, latitude, labelText) {
+        // 确认 longitude 和 latitude 是否有效
+        if (isNaN(longitude) || isNaN(latitude)) {
+            console.error(`无效的经纬度：${longitude}, ${latitude}`);
+            return;  // 返回并跳过
+        }
+
+        var point = new BMap.Point(longitude, latitude);
+        var marker = new BMap.Marker(point);  // 创建标记
+        map.addOverlay(marker);  // 将标记添加到地图
+        markers.push(marker);  // 保存标记以便后续操作
+
+        // 创建标签
+        var label = new BMap.Label(labelText, { offset: new BMap.Size(0, -30) });
+        label.setStyle({
+            backgroundColor: "transparent",
+            border: "none",
+            color: "black"
+        });
+        marker.setLabel(label);  // 设置标记的标签
+    }
+
+
+    // 搜索位置并添加标点
+    function searchLocation() {
+        var longitude = parseFloat(document.getElementById("longitude").value);
+        var latitude = parseFloat(document.getElementById("latitude").value);
+
+        // 使用 addMarkerWithLabel 函数来添加标记和标签
+        var labelText = `经度: ${longitude}, 纬度: ${latitude}`;
+        addMarkerWithLabel(longitude, latitude, labelText);
+
+        // 调整地图视图
+        var point = new BMap.Point(longitude, latitude);
+        map.panTo(point);
+
+        // 发送请求保存搜索记录
+        saveSearchRecord(longitude, latitude);
+    }
+
+    // 清除所有标记
+    function clearMarkers() {
+        markers.forEach(marker => map.removeOverlay(marker));
+        markers = [];
+        selectedMarkers.clear(); // 清除选择的标记
+        var items = document.querySelectorAll(".record-item");
+        items.forEach(item => item.classList.remove("selected"));
+    }
+
+    function changeZoom(value) {
+        map.setZoom(parseInt(value));
+    }
+
+    // 保存搜索记录到后端
+    function saveSearchRecord(longitude, latitude) {
+        fetch("/api/search", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json;charset=UTF-8"
+            },
+            body: JSON.stringify({
+                longitude: longitude,
+                latitude: latitude,
+                timestamp: new Date().toISOString(),
+            })
+        });
+    }
+
+    // 获取搜索记录并更新显示
+    function fetchSearchRecords() {
+        fetch("/api/search")
+            .then(response => response.json())
+            .then(data => {
+                records = data;
+                updateRecordList();
+            });
+    }
+
+    function deleteRecord(recordId) {
+        fetch(`/api/search/${recordId}`, {
+            method: "DELETE"
+        }).then(() => {
+            fetchSearchRecords();
+        });
+    }
+
+    // 更新记录列表函数
+    function updateRecordList() {
+        var recordList = document.getElementById("recordList");
+        recordList.innerHTML = ""; // 清空现有记录
+        records.forEach((record, index) => {
+            var item = document.createElement("div");
+            item.className = "record-item";
+            item.innerHTML = `
+                <div style="display: flex; align-items: center;"> <!-- 使用flex布局 -->
+                    经度: ${record.longitude}，纬度: ${record.latitude}
+                    <div class="record-time">${new Date(record.timestamp).toLocaleString()}</div>
+                    <button class="delete-button" onclick="deleteRecord(${record.id}); event.stopPropagation();">✖</button>
+                </div>
+            `;
+            item.onclick = function() { selectRecord(record, index); };
+            recordList.appendChild(item);
+        });
+    }
+
+    // 选择记录并添加或取消标点
+    function selectRecord(record, index) {
+        var point = new BMap.Point(record.longitude, record.latitude);
+
+        if (selectedMarkers.has(index)) {
+            // 已选中，取消标记
+            markers = markers.filter(marker => {
+                if (marker.getPosition().lng === record.longitude && marker.getPosition().lat === record.latitude) {
+                    map.removeOverlay(marker);
+                    return false; // 从数组中移除该标记
+                }
+                return true; // 保留其他标记
+            });
+            selectedMarkers.delete(index); // 移除选择状态
+        } else {
+            // 未选中，添加标记
+            var marker = new BMap.Marker(point);
+            map.addOverlay(marker);
+            markers.push(marker);
+            selectedMarkers.add(index); // 添加选择状态
+        }
+
+        // 高亮选中的记录
+        var items = document.querySelectorAll(".record-item");
+        items.forEach(item => item.classList.remove("selected"));
+        selectedMarkers.forEach(selectedIndex => {
+            items[selectedIndex].classList.add("selected");
+        });
+    }
+
+    // 获取最新 IoT 数据并更新显示
+    function fetchIotData() {
+        fetch("/api/iot-data/latest", {  // 修改为调用 /latest 接口
+            method: "GET",  // 使用 GET 方法来获取最新数据
+            headers: {
+                "Content-Type": "application/json;charset=UTF-8"
+            }
+        })
+        .then(response => response.json())  // 解析返回的 JSON 数据
+        .then(data => {
+            if (data) {
+                updateIotDataList([data]); // 将单条记录转为数组传递给更新函数
+            } else {
+                console.error("返回的数据为空或无效：", data);
+            }
+        })
+        .catch(error => {
+            console.error("获取 IoT 数据时发生错误：", error);
+        });
+    }
+
+    // 更新 IoT 数据列表
+    function updateIotDataList(iotRecords) {
+        var iotDataList = document.getElementById("iotDataList");
+        iotDataList.innerHTML = ""; // 清空现有内容
+
+        iotRecords.forEach(record => {
+            // 创建一个新 div 元素来展示每条记录
+            var item = document.createElement("div");
+            item.className = "iot-data-item";
+
+            // 创建并添加每个字段的显示内容
+            var longitude = document.createElement("p");
+            longitude.innerHTML = `<strong>经度:</strong> ${record.longitude}`;
+            item.appendChild(longitude);
+
+            var latitude = document.createElement("p");
+            latitude.innerHTML = `<strong>纬度:</strong> ${record.latitude}`;
+            item.appendChild(latitude);
+
+            var temperature = document.createElement("p");
+            temperature.innerHTML = `<strong>温度:</strong> ${record.temperature} °C`;
+            item.appendChild(temperature);
+
+            var humidity = document.createElement("p");
+            humidity.innerHTML = `<strong>湿度:</strong> ${record.humidity} %`;
+            item.appendChild(humidity);
+
+            var windSpeed = document.createElement("p");
+            windSpeed.innerHTML = `<strong>风速:</strong> ${record.windSpeed} m/s`;
+            item.appendChild(windSpeed);
+
+            var windDirection = document.createElement("p");
+
+            // 判断风向枚举值并显示对应的风向名称
+            let windDirectionText = "";
+            switch (record.windDirection = parseInt(record.windDirection, 10)) {
+                case 1:
+                    windDirectionText = "北风";
+                    break;
+                case 2:
+                    windDirectionText = "东北风";
+                    break;
+                case 3:
+                    windDirectionText = "东风";
+                    break;
+                case 4:
+                    windDirectionText = "东南风";
+                    break;
+                case 5:
+                    windDirectionText = "南风";
+                    break;
+                case 6:
+                    windDirectionText = "西南风";
+                    break;
+                case 7:
+                    windDirectionText = "西风";
+                    break;
+                case 8:
+                    windDirectionText = "西北风";
+                    break;
+                default:
+                    windDirectionText = "未知风向";
+            }
+            windDirection.innerHTML = `<strong>风向:</strong> ${windDirectionText}`;
+            item.appendChild(windDirection);
+
+            var timestamp = document.createElement("p");
+            timestamp.innerHTML = `<strong>获取数据时间:</strong> ${new Date(record.timestamp).toLocaleString()}`;
+            item.appendChild(timestamp);
+
+            var deviceTimestamp = document.createElement("p");
+            deviceTimestamp.innerHTML = `<strong>上传数据时间:</strong> ${new Date(record.deviceTimestamp).toLocaleString()}`;
+            item.appendChild(deviceTimestamp);
+
+            // 将每个记录添加到列表中
+            iotDataList.appendChild(item);
+        });
+    }
+
+    function searchAndMark() {
+        // 获取用户输入的设备数量
+        var count = parseInt(document.getElementById("deviceCount").value);
+
+        // 发起请求获取设备数据
+        fetch(`/api/iot-data/markers?n=${count}`)
+            .then(response => response.json())
+            .then(devices => {
+                console.log("Received devices data:", devices);  // 输出接收到的设备数据
+
+                // 清除现有标记
+                //markers.forEach(marker => map.removeOverlay(marker)); // 清空已有标记
+                markers = [];  // 清空标记数组
+
+                // 在地图上添加新的标记
+                devices.forEach(device => {
+                    if (device.latitude && device.longitude) {
+                        // 使用 addMarkerWithInfoWindow 函数来添加标记和信息框
+                        var labelText = `记录ID: ${device.id}`;
+                        console.log(`Adding marker for device ID: ${device.id} at (${device.longitude}, ${device.latitude})`);
+                        addMarkerWithInfoWindow(device, labelText);
+                    } else {
+                        console.error("设备缺少经纬度数据:", device);  // 处理缺少经纬度的设备
+                    }
+                });
+            })
+            .catch(error => {
+                console.error("获取设备数据时发生错误:", error);
+            });
+    }
+
+    function addMarkerWithInfoWindow(device, labelText) {
+        var point = new BMap.Point(device.longitude, device.latitude);  // 创建点
+
+        // 创建标记
+        var marker = new BMap.Marker(point);
+        map.addOverlay(marker);  // 添加标记到地图
+        markers.push(marker);  // 保存标记以便后续清除
+
+        // 创建显示的标签
+        var label = new BMap.Label(labelText, { offset: new BMap.Size(0, -30) });
+        label.setStyle({
+            backgroundColor: "transparent",
+            border: "none",
+            color: "black"
+        });
+        marker.setLabel(label);
+
+        // 根据 windDirection 显示风向
+        var windDirectionText = "未知风向";  // 默认风向
+        switch (device.windDirection = parseInt(device.windDirection, 10)) {
+            case 1:
+                windDirectionText = "北风";
+                break;
+            case 2:
+                windDirectionText = "东北风";
+                break;
+            case 3:
+                windDirectionText = "东风";
+                break;
+            case 4:
+                windDirectionText = "东南风";
+                break;
+            case 5:
+                windDirectionText = "南风";
+                break;
+            case 6:
+                windDirectionText = "西南风";
+                break;
+            case 7:
+                windDirectionText = "西风";
+                break;
+            case 8:
+                windDirectionText = "西北风";
+                break;
+            default:
+                windDirectionText = "未知风向";
+        }
+
+        // 创建信息框内容，显示经纬度、温度、湿度、风速、风向等信息
+        var infoContent = `
+            <div>
+                <strong>设备信息:</strong><br>
+                <b>经度:</b> ${device.longitude}<br>
+                <b>纬度:</b> ${device.latitude}<br>
+                <b>温度:</b> ${device.temperature || '未知'} °C<br>
+                <b>湿度:</b> ${device.humidity || '未知'} %<br>
+                <b>风速:</b> ${device.windSpeed || '0'} m/s<br>
+                <b>风向:</b> ${windDirectionText}  <br><!-- 显示风向 -->
+                <b>天气:</b> ${device.weather}  <!-- 显示风向 -->
+                <b>设备ID:</b> 0  <!-- 显示风向 -->
+            </div>
+        `;
+
+        // 创建信息框并添加到标记
+        var infoWindow = new BMap.InfoWindow(infoContent);  // 创建信息框
+        marker.addEventListener("click", function() {
+            this.openInfoWindow(infoWindow);  // 点击标记时打开信息框
+        });
+    }
+
+    // 页面加载时初始化地图
+    window.onload = function() {
+        initMap();
+        fetchSearchRecords();
+        fetchIotData()
+
+        // 创建 WebSocket 连接
+        var socket = new WebSocket("ws://localhost:8081/ws");
+
+        // 监听消息事件
+        socket.onmessage = function(event) {
+            var newRecord = JSON.parse(event.data);
+            records.push(newRecord); // 假设后端推送的是新记录
+            updateRecordList(); // 更新左侧栏目
+        };
+
+        // 处理连接打开
+        socket.onopen = function() {
+            console.log("WebSocket connection established.");
+        };
+
+        // 处理连接关闭
+        socket.onclose = function() {
+            console.log("WebSocket connection closed.");
+        };
+    };
+</script>
+</body>
+</html>
